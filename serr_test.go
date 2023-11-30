@@ -7,7 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"gerardus/serr"
+	"github.com/mikeschinkel/go-serr"
 )
 
 var Xs = strings.Repeat("-", 256)
