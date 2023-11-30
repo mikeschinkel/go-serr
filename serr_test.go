@@ -173,17 +173,19 @@ func verifyDiffResult(t *testing.T, n int, source, want, got string) {
 	wantLen := utf8.RuneCountInString(want)
 	gotLen := utf8.RuneCountInString(got)
 	if wantLen != gotLen {
-		t.Errorf("Length mismatch [source %d]\n\twant=%d\n\t got=%d",
+		t.Errorf("Length mismatch [source %d]\n\twant=%d\n\t got=%d, source=%s",
 			n,
 			wantLen,
 			gotLen,
+			source,
 		)
 	}
 	if want != got {
-		t.Errorf("Value mismatch [source %d]\n\twant=%s\n\t got=%s",
+		t.Errorf("Value mismatch [source %d]\n\twant=%s\n\t got=%s, source=%s",
 			n,
 			want,
 			got,
+			source,
 		)
 	}
 }
