@@ -3,6 +3,7 @@ package serr
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -17,6 +18,7 @@ const (
 type SError interface {
 	error
 	Args(...any) SError
+	Attrs() []slog.Attr
 	Err(error, ...any) SError
 	Unwrap() error
 	ValidArgs(...string) SError
@@ -126,6 +128,19 @@ func (se *sError) Is(err error) bool {
 
 func (se *sError) Unwrap() error {
 	return se.err
+}
+
+func (se *sError) Attrs() (attrs []slog.Attr) {
+	numArgs := len(se.args)
+	attrs = make([]slog.Attr, numArgs/2)
+	for i := 0; i < numArgs; i += 2 {
+		key, ok := se.args[i].(string)
+		if !ok {
+			panicf("Unexpected non-string error key: %v", se.args[i])
+		}
+		attrs[i] = slog.Any(key, se.args[i+1])
+	}
+	return attrs
 }
 
 func panicf(msg string, args ...any) {
