@@ -38,10 +38,14 @@ func New(msg string) SError {
 	}
 }
 
-func Cast(err error) SError {
-	return &sError{
+func Cast(err error, args ...any) SError {
+	sErr := &sError{
 		error: err,
 	}
+	if len(args) > 0 {
+		return sErr.Args(args...)
+	}
+	return sErr
 }
 
 func Wrap(err error, msg string, args ...any) SError {
