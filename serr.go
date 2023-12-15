@@ -19,6 +19,7 @@ type SError interface {
 	error
 	Args(...any) SError
 	Attrs() []slog.Attr
+	Attr(string) (slog.Attr, bool)
 	Err(error, ...any) SError
 	Unwrap() error
 	ValidArgs(...string) SError
@@ -132,6 +133,20 @@ func (se *sError) Is(err error) bool {
 
 func (se *sError) Unwrap() error {
 	return se.err
+}
+
+func (se *sError) Attr(key string) (attr slog.Attr, found bool) {
+	for _, try := range se.Attrs() {
+		if try.Key != key {
+			continue
+		}
+		attr = try
+		found = true
+		goto end
+	}
+
+end:
+	return attr, found
 }
 
 func (se *sError) Attrs() (attrs []slog.Attr) {
