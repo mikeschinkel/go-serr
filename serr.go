@@ -158,12 +158,15 @@ end:
 func (se *sError) Attrs() (attrs []slog.Attr) {
 	numArgs := len(se.args)
 	attrs = make([]slog.Attr, numArgs/2)
-	for i := 0; i < numArgs; i += 2 {
-		key, ok := se.args[i].(string)
+	for i := range attrs {
+		key, ok := se.args[2*i].(string)
 		if !ok {
 			panicf("Unexpected non-string error key: %v", se.args[i])
 		}
-		attrs[i] = slog.Any(key, se.args[i+1])
+		if i > len(attrs) {
+			panicf("Incorrect number of args %d in serr.Serror, should be %d", len(attrs), numArgs/2)
+		}
+		attrs[i] = slog.Any(key, se.args[2*i+1])
 	}
 	return attrs
 }
