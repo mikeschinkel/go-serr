@@ -25,6 +25,7 @@ type SError interface {
 	ValidArgs(...string) SError
 	NoArgs() SError
 	String() string
+	IsNil() bool
 }
 
 type sError struct {
@@ -61,6 +62,10 @@ func Wrap(err error, msg string, args ...any) SError {
 		return sErr.Args(args...)
 	}
 	return sErr
+}
+
+func (se *sError) IsNil() bool {
+	return se.error == nil
 }
 
 func (se *sError) String() string {
