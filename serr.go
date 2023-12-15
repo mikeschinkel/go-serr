@@ -43,6 +43,9 @@ func New(msg string) SError {
 
 func Cast(err error, args ...any) SError {
 	var sErr SError
+	if err == nil {
+		goto end
+	}
 	if errors.As(err, &sErr) {
 		goto end
 	}
@@ -50,7 +53,7 @@ func Cast(err error, args ...any) SError {
 		error: err,
 	}
 end:
-	if len(args) > 0 {
+	if err != nil && len(args) > 0 {
 		return sErr.Args(args...)
 	}
 	return sErr
