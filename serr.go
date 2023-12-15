@@ -293,3 +293,9 @@ func suffixRunes(input string, n int) string {
 func DevNull(x ...any) {
 	// Do nothing
 }
+
+func AsSError(err error) SError {
+	var sErr SError
+	errors.As(err, &sErr)
+	return sErr
+}
