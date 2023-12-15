@@ -24,6 +24,7 @@ type SError interface {
 	Unwrap() error
 	ValidArgs(...string) SError
 	NoArgs() SError
+	String() string
 }
 
 type sError struct {
