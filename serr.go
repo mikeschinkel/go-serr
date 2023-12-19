@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -34,6 +35,7 @@ type sError struct {
 	err       error
 	args      []any
 	validArgs []string
+	recurs    []*sError
 }
 
 func New(msg string) SError {
@@ -76,15 +78,48 @@ func (se *sError) String() string {
 	return se.error.Error()
 }
 
-func (se *sError) Error() string {
-	if se.err != nil {
-		return fmt.Sprintf("%s%s; %s",
+var mutex sync.RWMutex
+
+func (se *sError) recursing() (yes bool) {
+	mutex.RLock()
+	for i := len(se.recurs) - 1; i >= 0; i-- {
+		//goland:noinspection GoDirectComparisonOfErrors
+		if se == se.recurs[i] {
+			yes = true
+			goto end
+		}
+	}
+end:
+	mutex.RUnlock()
+	return yes
+}
+
+func (se *sError) selfError() (s string) {
+	if !se.recursing() {
+		mutex.Lock()
+		se.recurs = append(se.recurs, se)
+		s = se.err.Error()
+		se.recurs = se.recurs[:len(se.recurs)-1]
+		mutex.Unlock()
+	}
+	return s
+}
+
+func (se *sError) Error() (s string) {
+	if se.err == nil {
+		s = se.error.Error() + se.argsString()
+		goto end
+	}
+	if self := se.selfError(); self != "" {
+		s = fmt.Sprintf("%s%s; %s",
 			se.error.Error(),
 			se.argsString(),
-			se.err.Error(),
+			self,
 		)
 	}
-	return se.error.Error() + se.argsString()
+	s = se.error.Error() + se.argsString()
+end:
+	return s
 }
 
 func (se *sError) ValidArgs(args ...string) SError {
