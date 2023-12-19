@@ -17,6 +17,7 @@ const (
 
 type SError interface {
 	error
+	GetArgs() []any
 	Args(...any) SError
 	Attrs() []slog.Attr
 	Attr(string) (slog.Attr, bool)
@@ -118,6 +119,10 @@ func (se *sError) Args(args ...any) SError {
 	se.chkArgs(len(args))
 	se.args = args
 	return se
+}
+
+func (se *sError) GetArgs() []any {
+	return se.args
 }
 
 func (se *sError) Err(err error, args ...any) SError {
