@@ -163,12 +163,7 @@ func (se *sError) GetArgs() []any {
 func (se *sError) Err(err error, args ...any) SError {
 	se.err = err
 	if len(args) > 0 {
-		se.chkArgs(len(args))
-		if se.args == nil {
-			se.args = args
-		} else {
-			se.args = append(se.args, args)
-		}
+		se.Args(args...)
 	}
 	return se
 }
