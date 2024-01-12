@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"sync"
+	//"sync"
 	"unicode/utf8"
 )
 
@@ -28,14 +28,22 @@ type SError interface {
 	NoArgs() SError
 	String() string
 	IsNil() bool
+	Clone() SError
+	CloneWrap() SError
+	CloneUnwrap() error
 }
+
+var _ SError = (*sError)(nil)
 
 type sError struct {
 	error
-	err       error
-	args      []any
-	validArgs []string
-	recurs    []*sError
+	err          error
+	args         []any
+	validArgs    []string
+	recurs       []*sError
+	sealed       bool
+	locked       bool
+	cloneWrapped bool
 }
 
 func New(msg string) SError {
@@ -78,10 +86,7 @@ func (se *sError) String() string {
 	return se.error.Error()
 }
 
-var mutex sync.RWMutex
-
 func (se *sError) recursing() (yes bool) {
-	mutex.RLock()
 	for i := len(se.recurs) - 1; i >= 0; i-- {
 		//goland:noinspection GoDirectComparisonOfErrors
 		if se == se.recurs[i] {
@@ -90,17 +95,14 @@ func (se *sError) recursing() (yes bool) {
 		}
 	}
 end:
-	mutex.RUnlock()
 	return yes
 }
 
 func (se *sError) selfError() (s string) {
 	if !se.recursing() {
-		mutex.Lock()
 		se.recurs = append(se.recurs, se)
 		s = se.err.Error()
 		se.recurs = se.recurs[:len(se.recurs)-1]
-		mutex.Unlock()
 	}
 	return s
 }
@@ -110,6 +112,7 @@ func (se *sError) Error() (s string) {
 		s = se.error.Error() + se.argsString()
 		goto end
 	}
+
 	if self := se.selfError(); self != "" {
 		s = fmt.Sprintf("%s%s; %s",
 			se.error.Error(),
@@ -123,7 +126,11 @@ end:
 }
 
 func (se *sError) ValidArgs(args ...string) SError {
+	if se.sealed {
+		panicf("SError.ValidArgs() can only be called on an error once: %s", se.Error())
+	}
 	se.validArgs = args
+	se.sealed = true
 	return se
 }
 
@@ -153,7 +160,7 @@ func (se *sError) argsString() string {
 func (se *sError) Args(args ...any) SError {
 	se.chkArgs(len(args))
 	se.args = args
-	return se
+	return se.CloneWrap()
 }
 
 func (se *sError) GetArgs() []any {
@@ -163,9 +170,32 @@ func (se *sError) GetArgs() []any {
 func (se *sError) Err(err error, args ...any) SError {
 	se.err = err
 	if len(args) > 0 {
-		se.Args(args...)
+		//goland:noinspection GoTypeAssertionOnErrors,GoAssignmentToReceiver
+		se = se.Args(args...).(*sError)
 	}
-	return se
+	return se.CloneWrap()
+}
+
+// CloneWrap clones an *sError but replaces its .err property with itself.
+func (se *sError) CloneWrap() SError {
+	wrapped := se.Clone()
+	//goland:noinspection GoTypeAssertionOnErrors
+	sErr := wrapped.(*sError)
+	sErr.cloneWrapped = true
+	sErr.err = se
+	return sErr
+}
+
+// Clone shallow-clones an *sError object
+func (se *sError) Clone() SError {
+	return &sError{
+		error:     se.error,
+		err:       se.err,
+		args:      se.args,
+		validArgs: se.validArgs,
+		recurs:    se.recurs,
+		sealed:    se.sealed,
+	}
 }
 
 func (se *sError) chkArgs(count int) {
@@ -180,8 +210,51 @@ func (se *sError) Is(err error) bool {
 	return se.error == err
 }
 
-func (se *sError) Unwrap() error {
+func (se *sError) Unwrap() (err error) {
 	return se.err
+}
+
+func (se *sError) CloneUnwrap() (err error) {
+	var sErr *sError
+	var ok bool
+	err = se.err
+	if !se.cloneWrapped {
+		goto end
+	}
+
+	// The following looks crazy, but it is what we need to do to unwrap an *sError
+	// that has been .CloneWrapped() as .Err() and .Args() does.
+
+	// Convert the error to *sError. We check for error not because it is needed
+	// since it was .CloneWrapped() so we know it is an *sError, but because we might
+	// code a bug in the future and want to catch it.
+	//goland:noinspection GoTypeAssertionOnErrors
+	sErr, ok = err.(*sError)
+	if !ok {
+		panicf("Unexpected error: Clone-wrapped SError is not an SError: %s", se.Error())
+	}
+
+	// Now get the SError that was clone-wrapped.
+	//goland:noinspection GoTypeAssertionOnErrors
+	sErr, ok = sErr.err.(*sError)
+	if !ok {
+		goto end
+	}
+
+	// NOW get the error that was actually wrapped using the normal form of the word
+	// 'wrapped' in Golang error handling vernacular.
+	//goland:noinspection GoTypeAssertionOnErrors
+	sErr, ok = sErr.err.(*sError)
+	if !ok {
+		goto end
+	}
+
+	// Finally, call .Unwrap() to unwrap the error, which is equivalent to calling
+	// error.Unwrap().
+	//goland:noinspection GoTypeAssertionOnErrors
+	err = sErr.Unwrap()
+end:
+	return err
 }
 
 func (se *sError) Attr(key string) (attr slog.Attr, found bool) {
@@ -331,10 +404,6 @@ func suffixRunes(input string, n int) string {
 	}
 	slices.Reverse(result)
 	return string(result)
-}
-
-func DevNull(x ...any) {
-	// Do nothing
 }
 
 func AsSError(err error) SError {
