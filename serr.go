@@ -52,59 +52,12 @@ func New(msg string) SError {
 	}
 }
 
-func Cast(err error, args ...any) SError {
-	var sErr SError
-	if err == nil {
-		goto end
-	}
-	if errors.As(err, &sErr) {
-		goto end
-	}
-	sErr = &sError{
-		error: err,
-	}
-end:
-	if err != nil && len(args) > 0 {
-		return sErr.Args(args...)
-	}
-	return sErr
-}
-
-func Wrap(err error, msg string, args ...any) SError {
-	sErr := New(msg).Err(err)
-	if len(args) > 0 {
-		return sErr.Args(args...)
-	}
-	return sErr
-}
-
 func (se *sError) IsNil() bool {
 	return se.error == nil
 }
 
 func (se *sError) String() string {
 	return se.error.Error()
-}
-
-func (se *sError) recursing() (yes bool) {
-	for i := len(se.recurs) - 1; i >= 0; i-- {
-		//goland:noinspection GoDirectComparisonOfErrors
-		if se == se.recurs[i] {
-			yes = true
-			goto end
-		}
-	}
-end:
-	return yes
-}
-
-func (se *sError) selfError() (s string) {
-	if !se.recursing() {
-		se.recurs = append(se.recurs, se)
-		s = se.err.Error()
-		se.recurs = se.recurs[:len(se.recurs)-1]
-	}
-	return s
 }
 
 func (se *sError) Error() (s string) {
@@ -136,25 +89,6 @@ func (se *sError) ValidArgs(args ...string) SError {
 
 func (se *sError) NoArgs() SError {
 	return se
-}
-
-func (se *sError) argsString() string {
-	sb := strings.Builder{}
-	for i := 0; i < len(se.args)-1; i += 2 {
-		sb.WriteString(" [")
-		sb.WriteString(fmt.Sprintf("%v", se.args[i]))
-		sb.WriteByte('=')
-		switch value := se.args[i+1].(type) {
-		case string:
-			sb.WriteByte('\'')
-			sb.WriteString(value)
-			sb.WriteByte('\'')
-		default:
-			sb.WriteString(fmt.Sprintf("%v", value))
-		}
-		sb.WriteString("]")
-	}
-	return sb.String()
 }
 
 func (se *sError) Args(args ...any) SError {
@@ -195,13 +129,6 @@ func (se *sError) Clone() SError {
 		validArgs: se.validArgs,
 		recurs:    se.recurs,
 		sealed:    se.sealed,
-	}
-}
-
-func (se *sError) chkArgs(count int) {
-	if count%2 != 0 {
-		panicf("SError.Args() for '%s' must receive key-value pairs for args; received %d args instead",
-			se.error.Error(), count)
 	}
 }
 
@@ -287,10 +214,6 @@ func (se *sError) Attrs() (attrs []slog.Attr) {
 	return attrs
 }
 
-func panicf(msg string, args ...any) {
-	panic(fmt.Sprintf(msg, args...))
-}
-
 func Diff(s1, s2 string, n int) (_, _ string, start, end int) {
 
 	// Convert strings to local byte slices for immutability
@@ -346,10 +269,6 @@ end:
 	return s1, s2, start, end
 }
 
-func ExcerptWithLen(s string, width int) string {
-	return fmt.Sprintf(LengthPrefixFormat, len(s), Excerpt(s, width))
-}
-
 func Excerpt(s string, width int) string {
 	var prefix, suffix int
 
@@ -381,6 +300,32 @@ end:
 	return s
 }
 
+func (se *sError) argsString() string {
+	sb := strings.Builder{}
+	for i := 0; i < len(se.args)-1; i += 2 {
+		sb.WriteString(" [")
+		sb.WriteString(fmt.Sprintf("%v", se.args[i]))
+		sb.WriteByte('=')
+		switch value := se.args[i+1].(type) {
+		case string:
+			sb.WriteByte('\'')
+			sb.WriteString(value)
+			sb.WriteByte('\'')
+		default:
+			sb.WriteString(fmt.Sprintf("%v", value))
+		}
+		sb.WriteString("]")
+	}
+	return sb.String()
+}
+
+func (se *sError) chkArgs(count int) {
+	if count%2 != 0 {
+		panicf("SError.Args() for '%s' must receive key-value pairs for args; received %d args instead",
+			se.error.Error(), count)
+	}
+}
+
 func prefixRunes(input string, n int) string {
 	result := make([]rune, 0)
 	for i, r := range input {
@@ -406,8 +351,70 @@ func suffixRunes(input string, n int) string {
 	return string(result)
 }
 
-func AsSError(err error) SError {
+func (se *sError) recursing() (yes bool) {
+	for i := len(se.recurs) - 1; i >= 0; i-- {
+		//goland:noinspection GoDirectComparisonOfErrors
+		if se == se.recurs[i] {
+			yes = true
+			goto end
+		}
+	}
+end:
+	return yes
+}
+
+func (se *sError) selfError() (s string) {
+	if !se.recursing() {
+		se.recurs = append(se.recurs, se)
+		s = se.err.Error()
+		se.recurs = se.recurs[:len(se.recurs)-1]
+	}
+	return s
+}
+
+func panicf(msg string, args ...any) {
+	panic(fmt.Sprintf(msg, args...))
+}
+
+//goland:noinspection GoUnusedExportedFunction
+func Cast(err error, args ...any) SError {
 	var sErr SError
-	errors.As(err, &sErr)
+	if err == nil {
+		goto end
+	}
+	if errors.As(err, &sErr) {
+		goto end
+	}
+	sErr = &sError{
+		error: err,
+	}
+end:
+	if err != nil && len(args) > 0 {
+		return sErr.Args(args...)
+	}
 	return sErr
+}
+
+//goland:noinspection GoUnusedExportedFunction
+func Wrap(err error, msg string, args ...any) SError {
+	sErr := New(msg).Err(err)
+	if len(args) > 0 {
+		return sErr.Args(args...)
+	}
+	return sErr
+}
+
+//goland:noinspection GoUnusedExportedFunction
+func As(err error, sErr SError) {
+	errors.As(err, &sErr)
+}
+
+//goland:noinspection GoUnusedExportedFunction
+func Is(err, sErr error) bool {
+	return errors.Is(err, sErr)
+}
+
+//goland:noinspection GoUnusedExportedFunction
+func ExcerptWithLen(s string, width int) string {
+	return fmt.Sprintf(LengthPrefixFormat, len(s), Excerpt(s, width))
 }
